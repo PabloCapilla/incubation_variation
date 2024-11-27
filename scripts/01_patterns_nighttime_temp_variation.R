@@ -68,6 +68,14 @@ data %>%
   group_by(year, area) %>% 
   summarise(n_obs = n()) 
 
+# number of breeding events per habitat
+data %>% 
+  group_by(year, area, box) %>% 
+  filter(row_number() == 1) %>%
+  group_by(area) %>% 
+  summarise(n_ba = n()) 
+
+
 # number of clutches per year and habitat
 data %>% 
   group_by(year, box) %>% 

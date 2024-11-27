@@ -53,7 +53,6 @@ data_means <- df00 %>%
   summarise(mean_nighttime_var = mean(night_var, rm.na = T),
             nights_for_mean = n())
 
-
 data_nest <- df00 %>% 
   group_by(year, box) %>% 
   filter(row_number() == 1)
@@ -103,11 +102,11 @@ data %>%
 ##
 
 summary(data$night_var)
-data$no_hatch <- data$clutch_size - data$hatchlings
+data$hatch_survival <- ifelse(data$hatchlings == 0, 0, 1)
 
 
 # model fit
-model_hatching <- glmer(cbind(hatchlings, no_hatch) ~ 
+model_hatching <- glmer(hatch_survival ~ 
                           poly(inc_start_aprildays,2)[,2] : area +
                           poly(inc_start_aprildays,2)[,1] : area +
                           
@@ -154,7 +153,7 @@ drop1(model_hatching2, test = "Chisq")
 
 ## interaction 2
 anova(model_hatching2, update(model_hatching2, 
-                                . ~ . - poly(inc_start_aprildays, 2)[, 1]:area),
+                              . ~ . - poly(inc_start_aprildays, 2)[, 1]:area),
       test = "LRT")
 
 ## 3
@@ -180,124 +179,14 @@ model_hatching5 <- update(model_hatching4, .~.-mean_nighttime_var:area)
 drop1(model_hatching5, test = "Chisq")
 
 
+
+
+
+
 ## removing both interactions 
 full_model <- model_hatching5
 drop1(full_model, test = "Chisq")
 summary(full_model)
-
-#####
-
-##
-##
-##### Plot model predictions #####
-##
-##
-full_model_predictions <- full_model
-summary(full_model_predictions)
-drop1(full_model_predictions, test = "Chisq")
-
-# new dataframe to predict
-df_pred <- expand.grid(mean_nighttime_var = seq(min(data$mean_nighttime_var), 
-                                              max(data$mean_nighttime_var), 0.25),
-                       area = c("City", "Forest"),
-                       meantemp = mean(data$meantemp),
-                       inc_start_aprildays = seq(min(data$inc_start_aprildays), 
-                                                 max(data$inc_start_aprildays), 1))
-df_pred$clutch_size <- NA
-df_pred$clutch_size[df_pred$area == "Forest"] <- mean(data$clutch_size[data$area == "Forest"])
-df_pred$clutch_size[df_pred$area == "City"] <- mean(data$clutch_size[data$area == "City"])
-
-df_pred$prediction <- predict(full_model_predictions, 
-                              df_pred, 
-                              re.form = NA, 
-                              type = 'link')
-
-# plot only data in range
-data %>% 
-  group_by(area) %>% 
-  summarise(min_chr = min(inc_start_aprildays),
-            max_chr = max(inc_start_aprildays))
-
-remove_city <- which((df_pred$inc_start_aprildays < 20 | 
-                        df_pred$inc_start_aprildays > 44) & 
-                       df_pred$area == "City")
-remove_forest <- which((df_pred$inc_start_aprildays < 28 | 
-                          df_pred$inc_start_aprildays > 53) & 
-                         df_pred$area == "Forest")
-df_pred <- df_pred[-c(remove_city, remove_forest),]
-
-# SE for mean predictions
-mm <- model.matrix(~ 
-                     mean_nighttime_var +
-                     poly(inc_start_aprildays,2)[,1] +
-                     meantemp +
-                     area,
-                   data = df_pred)
-pvar1 <- diag(mm %*% tcrossprod(vcov(full_model_predictions),mm))
-cmult <- 1 ## 1 SE
-df_pred <- data.frame(
-  df_pred
-  , plo = df_pred$prediction-cmult*sqrt(pvar1)
-  , phi = df_pred$prediction+cmult*sqrt(pvar1)
-)
-
-df_pred$predictions_response <- boot::inv.logit(df_pred$prediction)
-df_pred$plo_response <- boot::inv.logit(df_pred$plo)
-df_pred$phi_response <- boot::inv.logit(df_pred$phi)
-
-##
-## plot for date from April 1
-hatching_var_plot <- ggplot(data = data, 
-                        aes(x = mean_nighttime_var, 
-                            y = hatchlings/clutch_size,
-                            fill = area,
-                            color = area)) +
-  geom_point(alpha = 0.25,
-             size = 2.5,
-             shape = 21,
-             position = position_jitter(width = 0.15)) +
-  theme_bw() +
-  facet_wrap(~area) +
-  theme(legend.position = "none",
-        legend.text = element_text("Arial", size = 10),
-        strip.background = element_blank(),
-        strip.text = element_text("Arial", size = 15),
-        panel.grid = element_blank(),
-        axis.title = element_text("Arial", size = 14),
-        axis.text = element_text("Arial", size = 12)) +
-  geom_ribbon(data = df_pred %>% 
-                group_by(area, mean_nighttime_var) %>% 
-                summarise(mean_plo = mean(plo_response),
-                          mean_phi = mean(phi_response),
-                          mean_pred = mean(predictions_response)), 
-              aes(ymin = mean_plo, 
-                  ymax = mean_phi, 
-                  y = mean_pred),
-              color = NA,
-              alpha = 0.5) +
-  geom_line(data = df_pred %>% 
-              group_by(area, mean_nighttime_var) %>% 
-              summarise(mean_plo = mean(plo_response),
-                        mean_phi = mean(phi_response),
-                        mean_pred = mean(predictions_response)), 
-            aes(y = mean_pred), 
-            size = 1.5) +
-  labs(x = bquote("Variation in night-time incubation temperature "~ (ºC^2)), 
-       y = 'Hatching success') +
-  scale_fill_okabe_ito() +
-  scale_color_okabe_ito()
-
-hatching_var_plot
-
-ggsave(filename = "./plots/Figure 2.png", 
-       plot = hatching_var_plot, 
-       device = "png", 
-       units = "mm",
-       width = 135, 
-       height = 100)  
-
-#####
-
 
 ##
 ##
@@ -306,7 +195,7 @@ ggsave(filename = "./plots/Figure 2.png",
 ##
 
 ## base table
-table_00 <- full_model_predictions %>%
+table_00 <- full_model %>%
   tbl_regression(intercept = T,
                  label = list(
                    `(Intercept)` = "Intercept",
@@ -324,7 +213,7 @@ table_hatching_var <- table_00 %>%
   italicize_levels() %>% 
   modify_table_body(fun = function(.){
     output <- left_join(x = .,
-                        y = drop1_output(x=full_model_predictions) %>% 
+                        y = drop1_output(x=full_model) %>% 
                           dplyr::select(variable = term, Chisq=statistic, df),
                         by = "variable")
     output$df <- ifelse(output$row_type == "label",  output$df, NA)
@@ -345,7 +234,8 @@ table_hatching_var <- table_00 %>%
 
 ##
 ## save table
-gtsave(table_hatching_var, "./tables/TABLE 2.html")
+gtsave(table_hatching_var, "./tables/TABLE S3.html")
 
 #####
+
 

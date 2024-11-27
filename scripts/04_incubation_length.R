@@ -271,7 +271,7 @@ inc_length_plot
 
 ##
 ##
-##### Table of results S3 #####
+##### Table of results S4 #####
 ##
 ##
 
@@ -315,7 +315,7 @@ table_inc_length_var <- table_00 %>%
 
 ##
 ## save table
-gtsave(table_inc_length_var, "./tables/TABLE S3.html")
+gtsave(table_inc_length_var, "./tables/TABLE S4.html")
 
 #####
 
