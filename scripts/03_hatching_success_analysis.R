@@ -184,6 +184,7 @@ drop1(model_hatching5, test = "Chisq")
 full_model <- model_hatching5
 drop1(full_model, test = "Chisq")
 summary(full_model)
+boot::inv.logit(-0.935)
 
 #####
 
